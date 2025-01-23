@@ -1,0 +1,169 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TriggerType {
+  WEBHOOK
+  POLLING
+  SCHEDULE
+  EVENT
+}
+
+model User {
+  id          String      @id @default(uuid())
+  email       String      @unique
+  password    String
+  connections Connection[]
+  workflows   Workflow[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model App {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  logoUrl     String?
+  triggers    TriggerDefinition[]
+  actions     ActionDefinition[]
+  connections Connection[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model TriggerDefinition {
+  id             String           @id @default(uuid())
+  app            App              @relation(fields: [appId], references: [id])
+  appId          String
+  key            String           @unique
+  name           String
+  description    String
+  type           TriggerType
+  connectionRequired Boolean      @default(true)
+  configSchema   Json
+  workflowTriggers WorkflowTrigger[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model ActionDefinition {
+  id             String           @id @default(uuid())
+  app            App              @relation(fields: [appId], references: [id])
+  appId          String
+  key            String           @unique
+  name           String
+  description    String
+  configSchema   Json
+  workflowActions WorkflowAction[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model Connection {
+  id              String           @id @default(uuid())
+  user            User             @relation(fields: [userId], references: [id])
+  userId          String
+  app             App              @relation(fields: [appId], references: [id])
+  appId           String
+  accessToken     String
+  refreshToken    String?
+  expiresAt       DateTime?
+  metadata        Json?
+  workflowTriggers WorkflowTrigger[]
+  workflowActions  WorkflowAction[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([userId, appId])
+}
+
+model Workflow {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  user        User             @relation(fields: [userId], references: [id])
+  userId      String
+  triggers    WorkflowTrigger[]
+  actions     WorkflowAction[]
+  executions  Execution[]
+  polling     Polling?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([isActive])
+}
+
+model WorkflowTrigger {
+  id                String             @id @default(uuid())
+  workflow          Workflow           @relation(fields: [workflowId], references: [id])
+  workflowId        String
+  type              TriggerType
+  definition        TriggerDefinition? @relation(fields: [triggerDefinitionId], references: [id])
+  triggerDefinitionId String?
+  connection        Connection?        @relation(fields: [connectionId], references: [id])
+  connectionId      String?
+  webhookPath       String?            @unique
+  webhookSecret     String?
+  config            Json
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model WorkflowAction {
+  id                String             @id @default(uuid())
+  workflow          Workflow           @relation(fields: [workflowId], references: [id])
+  workflowId        String
+  definition        ActionDefinition   @relation(fields: [actionDefinitionId], references: [id])
+  actionDefinitionId String
+  connection        Connection         @relation(fields: [connectionId], references: [id])
+  connectionId      String
+  config            Json
+  order             Int
+  executionLogs     ExecutionLog[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Execution {
+  id          String         @id @default(uuid())
+  workflow    Workflow       @relation(fields: [workflowId], references: [id])
+  workflowId  String
+  status      String
+  input       Json?
+  output      Json?
+  attempts    Int            @default(0)
+  logs        ExecutionLog[]
+  startedAt   DateTime       @default(now())
+  finishedAt  DateTime?
+}
+
+model ExecutionLog {
+  id          String         @id @default(uuid())
+  execution   Execution      @relation(fields: [executionId], references: [id])
+  executionId String
+  action      WorkflowAction? @relation(fields: [actionId], references: [id])
+  actionId    String?
+  message     String
+  level       String
+  details     Json?
+  timestamp   DateTime       @default(now())
+}
+
+model Polling {
+  id           String     @id @default(uuid())
+  workflow     Workflow   @relation(fields: [workflowId], references: [id])
+  workflowId   String     @unique
+  interval     Int
+  lastPolledAt DateTime?
+  nextPollAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
