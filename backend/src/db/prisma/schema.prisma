@@ -16,12 +16,24 @@ enum TriggerType {
   EVENT
 }
 
+enum AuthMethod {
+  EMAIL
+  GOOGLE
+  GITHUB
+  MICROSOFT
+}
+
 model User {
   id          String      @id @default(uuid())
   email       String      @unique
-  password    String
+  password    String?     // Optional for OAuth users
+  authMethod  AuthMethod  @default(EMAIL)
+  verified    Boolean     @default(false)
+  name        String?
+  avatar      String?
   connections Connection[]
   workflows   Workflow[]
+  lastLogin   DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -72,16 +84,18 @@ model Connection {
   userId          String
   app             App              @relation(fields: [appId], references: [id])
   appId           String
-  accessToken     String
-  refreshToken    String?
+  accessToken     String         
+  refreshToken    String?          
   expiresAt       DateTime?
+  scopes          String[]         // Store granted scopes
+  status          String           @default("ACTIVE") // ACTIVE/REVOKED/EXPIRED
   metadata        Json?
   workflowTriggers WorkflowTrigger[]
   workflowActions  WorkflowAction[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-
   @@unique([userId, appId])
+  @@index([expiresAt])
 }
 
 model Workflow {
@@ -97,14 +111,13 @@ model Workflow {
   isActive    Boolean          @default(true)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
-
   @@index([isActive])
 }
 
 model WorkflowTrigger {
   id                String             @id @default(uuid())
   workflow          Workflow           @relation(fields: [workflowId], references: [id])
-  workflowId        String
+  workflowId        String  
   type              TriggerType
   definition        TriggerDefinition? @relation(fields: [triggerDefinitionId], references: [id])
   triggerDefinitionId String?
